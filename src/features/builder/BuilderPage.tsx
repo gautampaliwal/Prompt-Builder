@@ -1,17 +1,27 @@
-import { useMemo, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
-import { estimateHeuristic } from '../../core/estimator/heuristic';
-import { defaultValues, hasErrors, render, type Issue } from '../../core/prompt-engine';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
+import { useServices } from '../../app/services-context';
+import { CopyButton } from '../../components/CopyButton';
+import { flash, promptFlashKey } from '../../components/flash';
+import { errorMessage } from '../../components/format';
+import { btn, field, label } from '../../components/styles';
+import { useBeforeUnload } from '../../components/useBeforeUnload';
+import { deriveTitle } from '../../core/library/fields';
+import { PROMPT_TITLE_MAX } from '../../core/schema/prompt';
 import type { Template } from '../../core/schema/template';
-import { textStats } from '../../core/text-stats';
 import { BUILT_IN_TEMPLATES, DEFAULT_TEMPLATE_ID } from '../../data/templates';
-import { VariableField, type FormValues } from './VariableField';
+import { PromptPreview } from './PromptPreview';
+import { TemplateFields } from './TemplateFields';
+import { toFormValues, useTemplateForm, type FormValues } from './useTemplateForm';
 
-function toFormValues(template: Template): FormValues {
-  const values: FormValues = {};
-  for (const [k, v] of Object.entries(defaultValues(template)))
-    values[k] = v === undefined ? '' : String(v);
-  return values;
+/**
+ * In-progress Builder input per template, kept in memory for the session so
+ * moving between screens doesn't lose it. A page reload asks first (beforeunload).
+ */
+const scratch = new Map<string, FormValues>();
+
+export function clearBuilderScratch() {
+  scratch.clear();
 }
 
 export function BuilderPage({
@@ -36,7 +46,7 @@ export function BuilderPage({
           </p>
         </div>
         <div className="space-y-1">
-          <label htmlFor="template-picker" className="block text-sm font-medium">
+          <label htmlFor="template-picker" className={label}>
             Template
           </label>
           <select
@@ -54,7 +64,7 @@ export function BuilderPage({
         </div>
       </header>
       {template ? (
-        // Remount on template change so the form starts from that template's defaults.
+        // Remount on template change so the form starts from that template's values.
         <BuilderForm key={template.id} template={template} />
       ) : (
         <p>No templates available.</p>
@@ -63,78 +73,115 @@ export function BuilderPage({
   );
 }
 
-type CopyState = 'idle' | 'copied' | 'failed';
+interface SaveDraft {
+  title: string;
+  busy: boolean;
+  error: string | null;
+}
 
 function BuilderForm({ template }: { template: Template }) {
-  const { register, control, formState } = useForm<FormValues>({
-    defaultValues: toFormValues(template),
-    mode: 'onTouched',
-  });
-  const values = useWatch({ control }) as FormValues;
-  const { touchedFields } = formState;
+  const services = useServices();
+  const navigate = useNavigate();
+  const { form, values, result, stats, tokens } = useTemplateForm(
+    template,
+    scratch.get(template.id),
+  );
+  const pristine = useMemo(() => JSON.stringify(toFormValues(template)), [template]);
+  const dirty = JSON.stringify(values) !== pristine;
+  const [saveDraft, setSaveDraft] = useState<SaveDraft | null>(null);
 
-  const result = useMemo(() => render(template, values), [template, values]);
-  const stats = useMemo(() => textStats(result.text), [result.text]);
-  const tokens = useMemo(() => estimateHeuristic(result.text), [result.text]);
-  const [copyState, setCopyState] = useState<CopyState>('idle');
+  useEffect(() => {
+    if (dirty) scratch.set(template.id, values);
+    else scratch.delete(template.id);
+  }, [template.id, values, dirty]);
+  useBeforeUnload(dirty);
 
-  const fieldErrors = new Map<string, string>();
-  for (const issue of result.issues) {
-    if (issue.variable && issue.severity === 'error' && touchedFields[issue.variable]) {
-      fieldErrors.set(issue.variable, issue.message);
-    }
+  function suggestedTitle(): string {
+    const first = template.variables.find(
+      (v) => v.required && (values[v.name] ?? '').trim() !== '',
+    );
+    return deriveTitle(first ? (values[first.name] ?? '') : result.text);
   }
 
-  async function copy() {
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (!saveDraft) return;
+    const title = saveDraft.title.trim();
+    if (!title) {
+      setSaveDraft({ ...saveDraft, error: 'Give the prompt a title.' });
+      return;
+    }
+    setSaveDraft({ title, busy: true, error: null });
     try {
-      await navigator.clipboard.writeText(result.text);
-      setCopyState('copied');
-    } catch {
-      setCopyState('failed');
+      const prompt = await services.prompts.create({
+        title,
+        text: result.text,
+        category: template.category,
+        sourceTemplateId: template.id,
+        variableValues: values,
+      });
+      scratch.delete(template.id);
+      flash.set(promptFlashKey(prompt.id), 'Saved as version 1.');
+      void navigate(`/prompts/${prompt.id}`);
+    } catch (err) {
+      setSaveDraft({
+        title,
+        busy: false,
+        error: `Couldn't save: ${errorMessage(err)}. Your input is still here.`,
+      });
     }
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <form
-        aria-label={`${template.name} fields`}
-        className="space-y-4"
-        onSubmit={(e) => e.preventDefault()}
-        noValidate
-      >
-        {template.description && (
-          <p className="text-sm text-slate-600 dark:text-slate-400">{template.description}</p>
-        )}
-        {template.variables.map((v) => (
-          <VariableField
-            key={v.name}
-            variable={v}
-            register={register}
-            error={fieldErrors.get(v.name)}
-          />
-        ))}
-      </form>
+      <TemplateFields template={template} form={form} issues={result.issues} />
 
       <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-        <section aria-labelledby="preview-title" className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="preview-title" className="text-lg font-semibold">
-              Preview
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void copy()}
-                disabled={result.text === ''}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Copy
+        {saveDraft && (
+          <form
+            onSubmit={(e) => void save(e)}
+            aria-label="Save prompt"
+            className="space-y-2 rounded-md border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-900 dark:bg-indigo-950"
+          >
+            <label htmlFor="save-title" className={label}>
+              Title
+            </label>
+            <input
+              id="save-title"
+              className={field}
+              value={saveDraft.title}
+              maxLength={PROMPT_TITLE_MAX}
+              onChange={(e) => setSaveDraft({ ...saveDraft, title: e.target.value, error: null })}
+              autoFocus
+            />
+            {saveDraft.error && (
+              <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+                {saveDraft.error}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button type="submit" className={btn.primary} disabled={saveDraft.busy}>
+                {saveDraft.busy ? 'Saving…' : 'Save prompt'}
               </button>
+              <button type="button" className={btn.secondary} onClick={() => setSaveDraft(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+        <PromptPreview
+          text={result.text}
+          stats={stats}
+          tokens={tokens}
+          issues={result.issues}
+          actions={
+            <>
+              <CopyButton text={result.text} />
               <button
                 type="button"
-                disabled
-                title="Saving arrives with the Library (M2)"
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700"
+                className={btn.secondary}
+                disabled={result.text === '' || saveDraft !== null}
+                onClick={() => setSaveDraft({ title: suggestedTitle(), busy: false, error: null })}
               >
                 Save
               </button>
@@ -142,66 +189,14 @@ function BuilderForm({ template }: { template: Template }) {
                 type="button"
                 disabled
                 title="The optimizer arrives in M3"
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700"
+                className={btn.secondary}
               >
                 Optimize
               </button>
-            </div>
-          </div>
-          <pre
-            data-testid="prompt-preview"
-            tabIndex={0}
-            aria-label="Rendered prompt"
-            className="min-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50 p-4 font-mono text-sm dark:border-slate-800 dark:bg-slate-900"
-          >
-            {result.text || (
-              <span className="font-sans text-slate-500">Your prompt will appear here.</span>
-            )}
-          </pre>
-          <p data-testid="prompt-stats" className="text-sm text-slate-600 dark:text-slate-400">
-            {stats.characters.toLocaleString()} characters · {stats.words.toLocaleString()} words ·
-            ≈ {tokens.count.toLocaleString()} tokens{' '}
-            <span className="text-slate-500">(approximate)</span>
-          </p>
-          <p className="text-xs text-slate-500">{tokens.method}. Real counts vary by model.</p>
-          <p role="status" className="text-sm">
-            {copyState === 'copied' && 'Copied to clipboard.'}
-            {copyState === 'failed' &&
-              'Could not copy. Select the preview text and copy it manually.'}
-          </p>
-        </section>
-
-        <IssuesPanel issues={result.issues} />
+            </>
+          }
+        />
       </div>
     </div>
-  );
-}
-
-function IssuesPanel({ issues }: { issues: Issue[] }) {
-  if (issues.length === 0) {
-    return (
-      <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-        No issues found.
-      </p>
-    );
-  }
-  const errors = hasErrors(issues);
-  return (
-    <section
-      aria-labelledby="issues-title"
-      className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950"
-    >
-      <h2 id="issues-title" className="text-sm font-semibold">
-        {errors ? 'Needs attention' : 'Warnings'} ({issues.length})
-      </h2>
-      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
-        {issues.map((i, n) => (
-          <li key={`${i.code}-${i.variable ?? i.sectionId ?? n}`}>
-            <span className="sr-only">{i.severity}: </span>
-            {i.message}
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }

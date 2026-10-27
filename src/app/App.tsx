@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react';
 import { NavLink, Route, Routes } from 'react-router';
 import { BuilderPage } from '../features/builder/BuilderPage';
+import { PromptEditorPage } from '../features/editor/PromptEditorPage';
+import { LibraryPage } from '../features/library/LibraryPage';
 
 /** Built screens, keyed by path. Everything else renders a milestone placeholder. */
 const PAGES: Partial<Record<string, ReactNode>> = {
   '/builder': <BuilderPage />,
+  '/library': <LibraryPage />,
 };
 
 /** Top-level screens from brief §8. */
@@ -64,6 +67,7 @@ export function App() {
               element={PAGES[s.path] ?? <Placeholder label={s.label} milestone={s.milestone} />}
             />
           ))}
+          <Route path="/prompts/:id" element={<PromptEditorPage />} />
           <Route path="*" element={<Placeholder label="Not found" milestone="—" />} />
         </Routes>
       </main>

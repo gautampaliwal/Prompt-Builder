@@ -1,15 +1,30 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import { templateSchema } from '../../core/schema/template';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeTestServices, renderRoutes } from '../../../tests/helpers/app';
+import { templateSchema, type Template } from '../../core/schema/template';
 import { BUILT_IN_TEMPLATES } from '../../data/templates';
-import { BuilderPage } from './BuilderPage';
+import { PromptEditorPage } from '../editor/PromptEditorPage';
+import { BuilderPage, clearBuilderScratch } from './BuilderPage';
 
 const preview = () => screen.getByTestId('prompt-preview');
+const renderBuilder = (templates?: readonly Template[], services = makeTestServices()) =>
+  renderRoutes(
+    {
+      '/builder': <BuilderPage templates={templates} />,
+      '/prompts/:id': <PromptEditorPage autosaveDelayMs={10} />,
+      '/library': <p>Library</p>,
+    },
+    { url: '/builder', services },
+  );
+
+beforeEach(() => {
+  clearBuilderScratch();
+});
 
 describe('BuilderPage', () => {
   it('renders a field for every Structured Prompt variable, marking the task required', () => {
-    render(<BuilderPage />);
+    renderBuilder();
     expect(screen.getByLabelText(/Task or objective/)).toHaveAttribute('aria-required', 'true');
     for (const label of [
       'Role or perspective',
@@ -27,7 +42,7 @@ describe('BuilderPage', () => {
 
   it('updates the preview, stats and issues live as the user types', async () => {
     const user = userEvent.setup();
-    render(<BuilderPage />);
+    renderBuilder();
 
     // Before typing: the missing task is listed, and the preview shows it unresolved.
     expect(screen.getByRole('heading', { name: /Needs attention/ })).toBeInTheDocument();
@@ -49,7 +64,7 @@ describe('BuilderPage', () => {
 
   it('shows a field error only after the field has been touched', async () => {
     const user = userEvent.setup();
-    render(<BuilderPage />);
+    renderBuilder();
     const task = screen.getByLabelText(/Task or objective/);
     expect(task).not.toHaveAttribute('aria-invalid');
 
@@ -62,11 +77,11 @@ describe('BuilderPage', () => {
   it('copies the rendered prompt to the clipboard', async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, 'writeText');
-    render(<BuilderPage />);
+    renderBuilder();
     await user.type(screen.getByLabelText(/Task or objective/), 'Do it.');
     await user.click(screen.getByRole('button', { name: 'Copy' }));
     expect(writeText).toHaveBeenCalledWith('Task:\nDo it.');
-    expect(screen.getByRole('status')).toHaveTextContent('Copied to clipboard.');
+    expect(screen.getByText('Copied to clipboard.')).toBeInTheDocument();
   });
 
   it('switches templates and resets the form to the new defaults', async () => {
@@ -85,9 +100,63 @@ describe('BuilderPage', () => {
       ],
       metadata: { createdAt: '2026-10-27T00:00:00.000Z', updatedAt: '2026-10-27T00:00:00.000Z' },
     });
-    render(<BuilderPage templates={[...BUILT_IN_TEMPLATES, other]} />);
+    renderBuilder([...BUILT_IN_TEMPLATES, other]);
     await user.selectOptions(screen.getByLabelText('Template'), 'other');
     expect(preview()).toHaveTextContent('Hi team');
     expect(within(screen.getByRole('form')).getAllByRole('textbox')).toHaveLength(1);
+  });
+
+  it('saves the prompt with a suggested title and opens it in the editor', async () => {
+    const user = userEvent.setup();
+    const { services } = renderBuilder();
+    await user.type(screen.getByLabelText(/Task or objective/), 'Plan the team offsite.');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    const title = screen.getByLabelText('Title');
+    expect(title).toHaveValue('Plan the team offsite.');
+    await user.clear(title);
+    await user.type(title, 'Offsite plan');
+    await user.click(screen.getByRole('button', { name: 'Save prompt' }));
+
+    expect(await screen.findByText('Saved as version 1.')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/prompts\//);
+    const { prompts } = await services.prompts.list();
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toMatchObject({
+      title: 'Offsite plan',
+      draft: 'Task:\nPlan the team offsite.',
+      currentVersion: 1,
+      sourceTemplateId: 'builtin-structured-prompt',
+    });
+    expect(prompts[0]?.variableValues?.task).toBe('Plan the team offsite.');
+  });
+
+  it('requires a title, and keeps the input if saving fails', async () => {
+    const user = userEvent.setup();
+    const base = makeTestServices();
+    const create = vi.fn(() => Promise.reject(new Error('QuotaExceededError')));
+    renderBuilder(undefined, { ...base, prompts: { ...base.prompts, create } });
+    await user.type(screen.getByLabelText(/Task or objective/), 'Keep me.');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await user.clear(screen.getByLabelText('Title'));
+    await user.click(screen.getByRole('button', { name: 'Save prompt' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Give the prompt a title.');
+    expect(create).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText('Title'), 'Mine');
+    await user.click(screen.getByRole('button', { name: 'Save prompt' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/QuotaExceededError.*still here/);
+    expect(screen.getByLabelText(/Task or objective/)).toHaveValue('Keep me.');
+    expect(screen.getByTestId('location')).toHaveTextContent('/builder');
+  });
+
+  it('keeps unsaved input when leaving and coming back during the session', async () => {
+    const user = userEvent.setup();
+    const first = renderBuilder();
+    await user.type(screen.getByLabelText(/Task or objective/), 'Draft in progress');
+    first.unmount();
+    renderBuilder();
+    expect(screen.getByLabelText(/Task or objective/)).toHaveValue('Draft in progress');
   });
 });

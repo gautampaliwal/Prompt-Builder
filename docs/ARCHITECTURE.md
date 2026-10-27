@@ -41,13 +41,35 @@ features/ components/ app/   (React UI)
 
 `check:ai` separately forbids AI SDK packages and AI provider hosts in `package.json`, `src/` and `dist/`.
 
-## Data flow (planned)
+## Data flow
 
-1. **Builder:** form values → `core/prompt-engine.render` → preview text + issues. Autosave goes through a service to `storage` (draft only).
-2. **Save version:** service runs one Dexie transaction: append a `Version`, bump `prompt.currentVersion`.
-3. **Optimize:** rendered text → `core/optimizer` → suggestions. User accepts some → `apply` → service saves a new version (`origin: optimizer`).
-4. **Estimate:** text → tokenizer adapter → count; pricing profile → costs. The method and assumptions travel with the result.
-5. **Backup:** `storage` → service → `core/backup.build` → JSON file. Import parses, validates, migrates, previews, resolves conflicts, then commits in one transaction.
+1. **Builder (M1–M2):** form values → `core/prompt-engine.render` → preview text and issues. **Save** → `prompts.create` writes the prompt and v1 in one transaction → navigate to `/prompts/:id`.
+2. **Editor autosave (M2):** edits are debounced for 800 ms → `prompts.saveDraft` → `repo.patch` (draft, plus form values in form mode). This never creates versions.
+3. **Save version / restore (M2):** `repo.mutate` reads the prompt and its latest version and appends the new version(s) in one transaction (details below).
+4. **Optimize (planned, M3):** rendered text → `core/optimizer` → suggestions. User accepts some → `apply` → service saves a new version (`origin: optimizer`).
+5. **Estimate (planned, M4):** text → tokenizer adapter → count; pricing profile → costs. The method and assumptions travel with the result.
+6. **Backup (planned, M5):** `storage` → service → `core/backup.build` → JSON file. Import parses, validates, migrates, previews, resolves conflicts, then commits in one transaction.
+
+## Storage and services (M2)
+
+**Database.** Dexie database `prompt-builder`, version 1 (`storage/migrations/v1.ts`). Stores: `templates`, `prompts` (indexes `createdAt`, `updatedAt`, `lastUsedAt`, `category`, `*tags`), `versions` (`promptId`, unique `[promptId+number]`), `settings`, `meta`. Migrations are append-only: a new version is a new file registered in `storage/db.ts`, and the PreToolUse hook blocks edits to existing migration files.
+
+**Repository.** `services/repositories.ts` defines `PromptRepository`. `storage/prompt-repository.ts` implements it, matched structurally because storage may not import services. Every write is parsed with `promptSchema` / `versionSchema`. Reads are parsed too: `list()` skips and counts invalid records (the Library shows a banner), and `get()` throws on an invalid record. Nothing is ever deleted for failing validation.
+
+**Atomic primitive.** `mutate(id, fn)` opens one read-write transaction, reads the prompt and its latest version, calls the synchronous `fn` to decide the writes, then applies them. IndexedDB serializes overlapping transactions, and the unique `[promptId+number]` index makes duplicate numbers impossible. Service rules built on it:
+
+| Operation            | Rule                                                                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `saveVersion`        | Appends `n+1` only if `draft` ≠ the latest version's text; otherwise returns `null`                                                           |
+| `restoreVersion(k)`  | If the draft is unsaved, first appends it as a version; then appends `origin: restore` with v_k's text and form values. History never rewinds |
+| `duplicate`          | New prompt from the current draft, with a fresh v1                                                                                            |
+| `detachFromTemplate` | Clears `variableValues`, switching to text mode; versions keep theirs                                                                         |
+
+**Editing modes.** A prompt with `variableValues` and an available template is edited through the template's form, and its draft is the rendered text. Otherwise it's edited as plain text. Each version snapshots `variableValues`, so restoring a form-made version brings the form back, and restoring a text-made one switches to text mode.
+
+**Autosave (`features/editor/useAutosave.ts`).** Saves are debounced and serialized, newest value last. A failure keeps the value in memory, shows an error with Retry, and retries on the next change. A leave-page guard is active while changes are unsaved. On unmount it flushes; if that final save fails, the value goes to an in-session recovery map and is restored the next time the prompt opens. Every editor action (save version, restore, duplicate, convert) flushes first, so it acts on what's on screen.
+
+**UI access.** Components get services from `useServices()` (React context); `createServices({ dbName })` gives tests a throwaway database. One-shot notices across navigation use `components/flash.ts`.
 
 ## Prompt engine (M1)
 

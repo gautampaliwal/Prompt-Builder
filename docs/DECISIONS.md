@@ -49,3 +49,30 @@ Dated, short entries. Add one whenever a choice isn't dictated by `docs/BRIEF.md
 - Vitest 5 replaced the global `bench()` with a `bench` test-context fixture that returns latency stats and runs only in projects generated from `benchmark.include`. The integration project's `benchmark.include` is `tests/perf/**/*.bench.ts`; the unit project's is empty.
 - Each benchmark asserts `p99 < target`, so the brief's targets are pass/fail rather than just recorded.
 - `npm run bench` stays out of `verify`, because machine-dependent timings would make the gate flaky. It's run before each milestone PR, with results recorded in `TESTING.md`.
+
+## 2026-10-27 — M2: two editing modes, chosen by stored form values
+
+- **Decision:** a prompt with `variableValues` (and an available template) is edited through the template's form, with its draft as the rendered text. Without them, it's edited as plain text. **Convert to plain text** switches explicitly, after confirmation. Each `Version` also snapshots `variableValues` (an optional field beyond brief §4.5), so restoring a form-made version brings the form back.
+- **Why:** reopening a saved prompt should show the fields it was built with, but prompts from imports, the optimizer or a missing template still need editing. Tying the mode to stored data avoids a separate flag that could drift.
+- **M3 consequence:** optimizer output isn't a form rendering, so accepting it on a form-mode prompt must detach the prompt, with a confirmation.
+
+## 2026-10-27 — M2: repository `mutate` primitive; storage implements the interface structurally
+
+- `PromptRepository.mutate(id, fn)` reads the prompt and its latest version and applies `fn`'s writes in one Dexie transaction. Version numbering, "save only if changed" and restore all build on it, so rapid or concurrent saves stay correct (tested with 10 interleaved saves). The unique `[promptId+number]` index is a second guard.
+- The architecture rules forbid `storage/` from importing `services/`, so the Dexie repository doesn't name the interface. `createServices` assigns it to `PromptRepository`, and TypeScript checks it structurally.
+
+## 2026-10-27 — M2: reads are validated; bad records are reported, never deleted
+
+- Every read is parsed. `list()` skips records that fail and returns `invalid: n`, and the Library shows a banner saying nothing was deleted. Repair or export of such records is M5 (backup) territory.
+
+## 2026-10-27 — M2: autosave, recovery and restore semantics
+
+- **Autosave:** 800 ms debounce, saves serialized, newest value last. On failure the value stays in memory with an error and Retry. There's a beforeunload guard while unsaved, and actions flush first.
+- **Leaving the editor:** the app uses the declarative `BrowserRouter`, so in-app navigation can't be blocked. Unmounting flushes instead; if that save fails, the value goes to an in-session recovery map and is restored on reopen. The Builder keeps unsaved input per template the same way.
+- **Restore** appends a `restore` version and never rewinds; an unsaved draft is kept as its own version first. **Duplicate** copies the current draft into a fresh history. **Favorite** doesn't bump `updatedAt`, so starring doesn't reorder "Last updated".
+- **Persistent storage** is requested after the first save, so any browser prompt follows a user action.
+
+## 2026-10-27 — M2: Zustand still deferred; inline confirmations instead of modals
+
+- No state is shared across screens yet: save status belongs to the editor, and notices use a tiny `flash` map. Adding Zustand now would add a dependency without removing complexity (brief §0.8). It's planned for the first cross-screen UI state (M5's offline/update indicator or toasts). This defers the stack choice in brief §2 rather than changing it.
+- Delete, restore and convert confirm inline (`role="alertdialog"`, focus moves to Cancel) rather than in a modal, which avoids focus-trap code and keeps the context visible.

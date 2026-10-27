@@ -21,6 +21,7 @@ export default defineConfig({
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
           environment: 'node',
+          setupFiles: ['tests/setup/integration.ts'],
           testTimeout: 60_000,
           // Perf benchmarks assert the brief §10 targets. Run with `npm run bench`;
           // kept out of `verify` because timings depend on the machine.
