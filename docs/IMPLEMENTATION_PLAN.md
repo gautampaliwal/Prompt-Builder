@@ -41,12 +41,11 @@ Milestones and acceptance criteria come from `docs/BRIEF.md` §11. Each mileston
 | `PW_CHROMIUM_PATH=…chromium-1243… npx playwright test` | ✅ 2/2 (shell + navigation + reload; network guard catches a planted off-origin fetch)                                                                          |
 | Post-edit hook on a file containing `eval(...)`        | ✅ exit 2, reports `no-eval`                                                                                                                                    |
 | Stop hook with `{}` / with `stop_hook_active: true`    | ✅ exit 0 (gate passes) / ✅ exit 0 (no loop)                                                                                                                   |
+| GitHub Actions CI on PR #1 (run 40457378283)           | ✅ success: `npm ci`, `verify`, Playwright browser install and `test:e2e` all passed with Playwright's bundled Chromium                                         |
 
 ### Not verified / open
 
-- `npx playwright install chromium` failed: the sandbox blocks Playwright's browser CDN. E2E was verified locally on Chromium 153 only. **CI has not run yet** because the branch hasn't been pushed (see below).
 - Hooks have not run inside a live Claude Code session. They were tested by piping events in directly.
-- **Push blocked:** this session's GitHub access can read but not push to `gautampaliwal/prompt-builder`. Install the Claude GitHub App on the repo, or push the branch yourself.
 
 ### Decisions
 
