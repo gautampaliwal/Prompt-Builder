@@ -7,16 +7,52 @@ Milestones and acceptance criteria come from `docs/BRIEF.md` §11. Each mileston
 | #   | Milestone                             | Status                                |
 | --- | ------------------------------------- | ------------------------------------- |
 | M0  | Harness and plan                      | ✅ Merged (PR #1)                     |
-| M1  | Schemas, prompt engine, Builder       | ✅ Done; PR open, **awaiting review** |
-| M2  | Storage, versions, Library            | ⏳ Next                               |
-| M3  | Optimizer                             | —                                     |
+| M1  | Schemas, prompt engine, Builder       | ✅ Merged (PR #2)                     |
+| M2  | Storage, versions, Library            | ✅ Done; PR open, **awaiting review** |
+| M3  | Optimizer                             | ⏳ Next                               |
 | M4  | Estimator                             | —                                     |
 | M5  | PWA, backup/import                    | —                                     |
 | M6  | Templates, settings, a11y, docs, perf | —                                     |
 
 ## Next concrete task
 
-**After the M1 PR merges:** branch `feat/m2-library` from `main`. Start with `src/core/schema/prompt.ts` (Prompt and Version schemas per brief §4.5), then `src/storage/db.ts` (Dexie v1 stores) with an integration test on `fake-indexeddb` that saves a version and reads it back. Then the services for save version and restore, with transactional writes.
+**After the M2 PR merges:** branch `feat/m3-optimizer` from `main`. Start with `src/core/optimizer/registry.ts` (rule IDs must equal `OPTIMIZER_RULE_IDS`; add a test) and `rules/normalize-whitespace.ts` test-first, including code-fence protection. Then `apply.ts` (descending `start`, overlap → `conflicting`) and a 50k-char fixture for the < 200 ms bench. The UI reuses `core/diff/line-diff.ts` and `VersionHistory`'s `DiffView`. Accepting changes calls `saveVersion` with `origin: 'optimizer'`. For a template-bound prompt, the optimized text can't come from the form, so accepting must detach it first; confirm that in the UI, as restore does.
+
+---
+
+## M2 — Storage, versions, Library (branch `feat/m2-library`)
+
+### Completed
+
+- **Core:** `core/schema/prompt.ts` (Prompt and Version, with optional `variableValues` snapshots on both), `core/library` (`queryPrompts`, `allTags`, `normalizeTags`, `deriveTitle`), `core/diff/line-diff.ts` (prefix/suffix trim plus LCS, size cap with fallback, context collapsing).
+- **Storage:** Dexie DB v1 (`storage/migrations/v1.ts` registered in `storage/db.ts`); `createDexiePromptRepository` validates every read and write. `mutate()` does read, decide and write in one transaction. Unreadable records are counted, never deleted.
+- **Services:** `PromptRepository` interface; prompt service with create (v1), `saveDraft` (no versions), `saveVersion` (only if changed), `restoreVersion` (keeps unsaved changes as a version first, history stays linear), duplicate, `updateMeta`, `markUsed`, `detachFromTemplate` and remove. `createServices()` is the composition root, injected into React through `ServicesProvider`. Persistent storage is requested after the first save.
+- **UI:**
+  - Builder: Save (with a suggested title) opens the new prompt, and in-progress input is kept per template for the session.
+  - Editor at `/prompts/:id`: form mode for template-bound prompts and text mode otherwise, plus autosave (800 ms) with Saved / Unsaved / Saving / error-with-Retry status and a leave-page guard. If the final save on leaving fails, the changes are recovered in this session.
+  - Editor actions: Save version, Copy (records last used), Duplicate, Convert to plain text, Delete; all confirmations are inline.
+  - Version history: Restore, plus a line diff between any two versions or the current draft.
+  - Library at `/library`: search, category, tag, favorites, four sorts, Show more paging, empty and no-match states, a banner for unreadable records, and favorite / duplicate / delete actions.
+
+### Commands actually run (2026-10-27, build sandbox, Node 22.23.4)
+
+| Command                                                                                                           | Result                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run verify`                                                                                                  | ✅ exit 0: unit **99/99**, integration **33/33**, 0 arch violations (51 modules), build ✓, check:ai ✓, check:size **161.7 KB gz** (was 120; Dexie and the editor/Library UI added) |
+| `npm run bench`                                                                                                   | ✅ 4/4 under target: search over 5,000 prompts p99 **12.0 ms** (two terms + sort) and **11.5 ms** (filters + title sort) vs < 300 ms; render p99 0.07 / 0.18 ms                    |
+| `PW_CHROMIUM_PATH=… npx playwright test`                                                                          | ✅ 6/6, including journey 1 (Builder → save → autosave → version → reload → Library search → reopen) and delete → "not found"                                                      |
+| Flake found on a verify rerun: the restore test clicked a history button that was replaced when the list reloaded | Fixed the test to wait for the refreshed history (and to assert the default v1→v2 comparison it had been passing vacuously); 5 consecutive runs green                              |
+| Screenshots: Library and editor at 1280 px and 390 px                                                             | No horizontal overflow; see known issues for the mobile title                                                                                                                      |
+
+### Not verified / open
+
+- E2E ran locally on Chromium 153. CI on the PR is authoritative.
+- Real IndexedDB was exercised only in the E2E browser; unit and integration tests use `fake-indexeddb`.
+- Hooks still haven't run inside a live Claude Code session.
+
+### Decisions
+
+See `docs/DECISIONS.md` (M2 entries): two editing modes, the repository `mutate` primitive, read validation, autosave and recovery, restore semantics, duplicate, Zustand still deferred, inline confirmations.
 
 ---
 

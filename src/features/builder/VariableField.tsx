@@ -1,16 +1,13 @@
 import type { UseFormRegister } from 'react-hook-form';
+import { field as inputClass } from '../../components/styles';
 import type { Variable } from '../../core/schema/template';
-
-export type FormValues = Record<string, string>;
+import type { FormValues } from './useTemplateForm';
 
 interface Props {
   variable: Variable;
   register: UseFormRegister<FormValues>;
   error?: string | undefined;
 }
-
-const inputClass =
-  'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-indigo-500 aria-[invalid=true]:border-red-500 dark:border-slate-700 dark:bg-slate-900';
 
 export function VariableField({ variable: v, register, error }: Props) {
   const id = `var-${v.name}`;
