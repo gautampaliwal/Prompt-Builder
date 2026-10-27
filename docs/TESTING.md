@@ -4,12 +4,12 @@ Strategy from `docs/BRIEF.md` §10: test **behavior**, not implementation detail
 
 ## Layers
 
-| Layer       | Tool                                         | Location                             | Runs                       |
-| ----------- | -------------------------------------------- | ------------------------------------ | -------------------------- |
-| Unit        | Vitest + RTL (jsdom)                         | `src/**/*.test.{ts,tsx}`             | `npm run test:unit`        |
-| Integration | Vitest (node; `fake-indexeddb` from M2)      | `tests/integration/**/*.test.ts`     | `npm run test:integration` |
-| E2E         | Playwright vs `vite preview` of a prod build | `tests/e2e/**/*.spec.ts`             | `npm run test:e2e`         |
-| Perf        | Vitest bench                                 | `tests/perf/**/*.bench.ts` (from M1) | `npm run bench`            |
+| Layer       | Tool                                          | Location                         | Runs                       |
+| ----------- | --------------------------------------------- | -------------------------------- | -------------------------- |
+| Unit        | Vitest + RTL (jsdom)                          | `src/**/*.test.{ts,tsx}`         | `npm run test:unit`        |
+| Integration | Vitest (node; `fake-indexeddb` from M2)       | `tests/integration/**/*.test.ts` | `npm run test:integration` |
+| E2E         | Playwright vs `vite preview` of a prod build  | `tests/e2e/**/*.spec.ts`         | `npm run test:e2e`         |
+| Perf        | Vitest 5 bench (`bench` test-context fixture) | `tests/perf/**/*.bench.ts`       | `npm run bench`            |
 
 ## E2E network guard
 
@@ -32,4 +32,13 @@ Results produced this way use a different Chromium build than CI, so CI is autho
 
 ## Perf results
 
-None yet. Recorded here from M1 onward: render, optimize at 50k chars, and search over 5,000 prompts against the brief's targets.
+Benchmarks assert the brief §10 targets on p99 latency, so a regression fails `npm run bench`. They're kept out of `verify` because timings depend on the machine; run them before a milestone PR and record the results here.
+
+| Date       | Benchmark                                 | Mean     | p99      | Target   | Machine                |
+| ---------- | ----------------------------------------- | -------- | -------- | -------- | ---------------------- |
+| 2026-10-27 | Render, typical Structured Prompt (~2 KB) | 0.022 ms | 0.057 ms | < 100 ms | Build sandbox, Node 22 |
+| 2026-10-27 | Render, large Structured Prompt (~120 KB) | 0.036 ms | 0.194 ms | < 100 ms | Build sandbox, Node 22 |
+| —          | Optimize, 50k chars                       | —        | —        | < 200 ms | M3                     |
+| —          | Search, 5,000 prompts                     | —        | —        | < 300 ms | M2                     |
+
+Vitest may print a "module export getters" warning for benchmarks. It adds a small constant overhead, which makes the numbers slightly pessimistic.

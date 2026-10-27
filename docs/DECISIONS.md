@@ -31,3 +31,21 @@ Dated, short entries. Add one whenever a choice isn't dictated by `docs/BRIEF.md
 ## 2026-10-27 — `PW_CHROMIUM_PATH` escape hatch for E2E
 
 - Sandboxes without access to Playwright's browser CDN can point E2E at a preinstalled Chromium. CI never sets it and uses the bundled browser, so CI results are authoritative.
+
+## 2026-10-27 — M1: an optional section is "empty" only when all its placeholders are empty
+
+- **Context:** sections such as `Context:\n{{context}}` carry a static label, so "omit empty optional sections" can't mean "the rendered text is blank".
+- **Decision:** an optional section is omitted when it has at least one placeholder and none of them contributes text. A section with only static text is always kept. A missing required value or an undeclared placeholder is kept as raw `{{name}}`, so it can't silently disappear, and it counts as content.
+- **Why:** labels never leak through on their own, missing data stays visible in the preview, and static instructions are never dropped.
+
+## 2026-10-27 — M1: form state in React Hook Form, validation in the core engine
+
+- **Decision:** the Builder uses React Hook Form for field state only. All validation comes from `core/prompt-engine` (`validateValues`, `validateTemplate`), so the UI, saved prompts and imports share one set of rules. `@hookform/resolvers` isn't installed. Field-level errors appear once a field is touched; the issues panel always shows everything.
+- **Why:** templates are user-defined, so their Zod schemas would have to be generated at runtime. Using the engine's own validator avoids a second, divergent rule set and a dependency.
+- **Zustand** is deferred until M2, when there's shared state (save status).
+
+## 2026-10-27 — M1: Vitest 5 benchmarks assert targets; kept out of `verify`
+
+- Vitest 5 replaced the global `bench()` with a `bench` test-context fixture that returns latency stats and runs only in projects generated from `benchmark.include`. The integration project's `benchmark.include` is `tests/perf/**/*.bench.ts`; the unit project's is empty.
+- Each benchmark asserts `p99 < target`, so the brief's targets are pass/fail rather than just recorded.
+- `npm run bench` stays out of `verify`, because machine-dependent timings would make the gate flaky. It's run before each milestone PR, with results recorded in `TESTING.md`.

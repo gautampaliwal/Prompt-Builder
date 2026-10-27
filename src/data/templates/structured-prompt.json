@@ -1,0 +1,167 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "builtin-structured-prompt",
+  "name": "Structured Prompt",
+  "description": "General-purpose prompt with role, task, context, input, constraints, tone, length, output format and examples. Leave any optional field blank to drop its section.",
+  "category": "general",
+  "tags": ["general", "structured"],
+  "status": "active",
+  "builtIn": true,
+  "template": {
+    "type": "structured",
+    "sections": [
+      {
+        "id": "role",
+        "label": "Role",
+        "enabled": true,
+        "required": false,
+        "content": "Act as {{role}}."
+      },
+      {
+        "id": "task",
+        "label": "Task",
+        "enabled": true,
+        "required": true,
+        "content": "Task:\n{{task}}"
+      },
+      {
+        "id": "context",
+        "label": "Context",
+        "enabled": true,
+        "required": false,
+        "content": "Context:\n{{context}}"
+      },
+      {
+        "id": "input",
+        "label": "Input data",
+        "enabled": true,
+        "required": false,
+        "content": "Input:\n{{input}}"
+      },
+      {
+        "id": "constraints",
+        "label": "Constraints",
+        "enabled": true,
+        "required": false,
+        "content": "Constraints:\n{{constraints}}"
+      },
+      {
+        "id": "tone",
+        "label": "Tone",
+        "enabled": true,
+        "required": false,
+        "content": "Tone: {{tone}}."
+      },
+      {
+        "id": "length",
+        "label": "Length",
+        "enabled": true,
+        "required": false,
+        "content": "Length: {{length}}."
+      },
+      {
+        "id": "output",
+        "label": "Output format",
+        "enabled": true,
+        "required": false,
+        "content": "Output format:\n{{outputFormat}}"
+      },
+      {
+        "id": "examples",
+        "label": "Examples",
+        "enabled": true,
+        "required": false,
+        "content": "Examples:\n{{examples}}"
+      }
+    ]
+  },
+  "variables": [
+    {
+      "name": "role",
+      "label": "Role or perspective",
+      "description": "Who the AI should act as, e.g. \"a senior data analyst\".",
+      "type": "string",
+      "required": false,
+      "maxLength": 200
+    },
+    {
+      "name": "task",
+      "label": "Task or objective",
+      "description": "What you want done, in one or two sentences.",
+      "type": "text",
+      "required": true,
+      "maxLength": 5000
+    },
+    {
+      "name": "context",
+      "label": "Background context",
+      "description": "Anything the AI needs to know to do this well.",
+      "type": "text",
+      "required": false,
+      "maxLength": 20000
+    },
+    {
+      "name": "input",
+      "label": "Input data",
+      "description": "Text, data or code the task should work on.",
+      "type": "text",
+      "required": false,
+      "maxLength": 100000
+    },
+    {
+      "name": "constraints",
+      "label": "Constraints and instructions",
+      "description": "Rules to follow, things to avoid.",
+      "type": "text",
+      "required": false,
+      "maxLength": 5000
+    },
+    {
+      "name": "tone",
+      "label": "Tone",
+      "type": "enum",
+      "required": false,
+      "options": ["Neutral", "Professional", "Friendly", "Formal", "Casual", "Persuasive"],
+      "defaultValue": ""
+    },
+    {
+      "name": "length",
+      "label": "Desired length",
+      "type": "enum",
+      "required": false,
+      "options": ["Brief", "Moderate", "Detailed"],
+      "defaultValue": ""
+    },
+    {
+      "name": "outputFormat",
+      "label": "Output format",
+      "description": "E.g. \"a bulleted list\", \"a JSON object with keys …\", \"a Markdown table\".",
+      "type": "text",
+      "required": false,
+      "maxLength": 2000
+    },
+    {
+      "name": "examples",
+      "label": "Examples",
+      "description": "Optional sample inputs and outputs that show what you want.",
+      "type": "text",
+      "required": false,
+      "maxLength": 20000
+    }
+  ],
+  "optimization": {
+    "enabledRules": [
+      "normalize-whitespace",
+      "collapse-blank-lines",
+      "duplicate-lines",
+      "redundant-phrases",
+      "contradictions",
+      "missing-variables"
+    ],
+    "preserveSectionOrder": true
+  },
+  "metadata": {
+    "createdAt": "2026-10-27T00:00:00.000Z",
+    "updatedAt": "2026-10-27T00:00:00.000Z"
+  }
+}
