@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+/* Dark mode is class-driven (html.dark) so the user can override the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* System font stack only: no remote fonts (brief §7). */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-indigo-500);
+  outline-offset: 2px;
+}
