@@ -2,7 +2,7 @@
 
 A local-first, offline-capable web app for creating, optimizing, estimating, saving, versioning and exporting AI prompts. It works alongside ChatGPT, Claude, Gemini and others, and **depends on none of them**: no AI APIs, no backend, no accounts. Your data stays in your browser.
 
-> **Status:** Milestone 0 (engineering harness) is complete. Product features land from M1 onward. See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+> **Status:** M1 done: the Builder works (templates, live preview, validation, token estimate). Saving, optimizing and offline support land in M2–M5. See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
 ## Quick start
 

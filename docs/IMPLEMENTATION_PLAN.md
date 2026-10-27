@@ -4,19 +4,49 @@ Milestones and acceptance criteria come from `docs/BRIEF.md` §11. Each mileston
 
 ## Status
 
-| #   | Milestone                             | Status                                   |
-| --- | ------------------------------------- | ---------------------------------------- |
-| M0  | Harness and plan                      | ✅ Done; **awaiting approval** before M1 |
-| M1  | Schemas, prompt engine, Builder       | ⏳ Next                                  |
-| M2  | Storage, versions, Library            | —                                        |
-| M3  | Optimizer                             | —                                        |
-| M4  | Estimator                             | —                                        |
-| M5  | PWA, backup/import                    | —                                        |
-| M6  | Templates, settings, a11y, docs, perf | —                                        |
+| #   | Milestone                             | Status                                |
+| --- | ------------------------------------- | ------------------------------------- |
+| M0  | Harness and plan                      | ✅ Merged (PR #1)                     |
+| M1  | Schemas, prompt engine, Builder       | ✅ Done; PR open, **awaiting review** |
+| M2  | Storage, versions, Library            | ⏳ Next                               |
+| M3  | Optimizer                             | —                                     |
+| M4  | Estimator                             | —                                     |
+| M5  | PWA, backup/import                    | —                                     |
+| M6  | Templates, settings, a11y, docs, perf | —                                     |
 
 ## Next concrete task
 
-**After approval of M0:** branch `feat/m1-prompt-engine` from `main`. Start with `src/core/schema/template.ts` (Zod schemas for template, section, variable; tests for invalid enums, duplicate IDs, and enum defaults not in options). Then build `core/prompt-engine` (placeholder parser → validator → renderer) test-first.
+**After the M1 PR merges:** branch `feat/m2-library` from `main`. Start with `src/core/schema/prompt.ts` (Prompt and Version schemas per brief §4.5), then `src/storage/db.ts` (Dexie v1 stores) with an integration test on `fake-indexeddb` that saves a version and reads it back. Then the services for save version and restore, with transactional writes.
+
+---
+
+## M1 — Schemas, prompt engine, Builder (branch `feat/m1-prompt-engine`)
+
+### Completed
+
+- `core/schema/template.ts`: Zod schemas for templates, sections and the 4 variable types; fixed category list; rule IDs from brief §5.2; refinements for duplicate section IDs and variable names, enum defaults outside the options, a required enum with no default, duplicate options, number min/max and defaults, and string defaults over `maxLength`.
+- `core/prompt-engine`: `tokenize` (with the `\{{` escape; invalid names become invalid tokens; no nesting), `validateTemplate` (undeclared or invalid placeholders, unused variables), `validateValues` (required only when used by an enabled section; single-line strings, `maxLength`, enum options, number bounds), and `render` (rules in `ARCHITECTURE.md`).
+- `core/estimator`: the `TokenizerAdapter` interface and the heuristic adapter. `core/text-stats.ts`: characters as code points, plus word count.
+- `data/templates/structured-prompt.json`: the built-in Builder template, with all 9 brief fields and every optional section omitted when blank. It's validated when loaded, and a test checks it.
+- Builder screen: template picker, form generated from the variables (React Hook Form), live preview, issues panel, characters/words/tokens labelled approximate with the method shown, and Copy with a status message. Field errors appear once a field is touched. Save and Optimize are visibly disabled until M2 and M3.
+
+### Commands actually run (2026-10-27, build sandbox, Node 22.23.4)
+
+| Command                                            | Result                                                                                                                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run verify`                                   | ✅ exit 0: unit 51/51, integration 13/13, 0 arch violations (21 modules), build ✓, check:ai ✓, check:size **120.0 KB gz** (was 79.7; Zod and React Hook Form added) |
+| `npm run bench`                                    | ✅ 2/2 under target: render typical p99 0.057 ms, large (~120 KB) p99 0.194 ms (target < 100 ms)                                                                    |
+| `PW_CHROMIUM_PATH=… npx playwright test`           | ✅ 4/4: Builder journey (live render, issues, optional section dropped when cleared), keyboard order, smoke, network guard                                          |
+| Screenshots at 1280 px (light and dark) and 390 px | No horizontal overflow; preview sits below the form on mobile (see `KNOWN_ISSUES.md`)                                                                               |
+
+### Not verified / open
+
+- E2E ran locally on Chromium 153. CI on the PR runs the bundled browser and is authoritative.
+- Hooks still haven't run inside a live Claude Code session.
+
+### Decisions
+
+See `docs/DECISIONS.md` (2026-10-27, M1 entries): empty-section rule, the form-validation approach, Vitest 5 benchmarks, and bench kept out of `verify`.
 
 ---
 

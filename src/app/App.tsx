@@ -1,6 +1,13 @@
+import type { ReactNode } from 'react';
 import { NavLink, Route, Routes } from 'react-router';
+import { BuilderPage } from '../features/builder/BuilderPage';
 
-/** Top-level screens from brief §8. Each is a placeholder until its milestone lands. */
+/** Built screens, keyed by path. Everything else renders a milestone placeholder. */
+const PAGES: Partial<Record<string, ReactNode>> = {
+  '/builder': <BuilderPage />,
+};
+
+/** Top-level screens from brief §8. */
 export const SCREENS = [
   { path: '/', label: 'Dashboard', milestone: 'M6' },
   { path: '/builder', label: 'Builder', milestone: 'M1' },
@@ -54,7 +61,7 @@ export function App() {
             <Route
               key={s.path}
               path={s.path}
-              element={<Placeholder label={s.label} milestone={s.milestone} />}
+              element={PAGES[s.path] ?? <Placeholder label={s.label} milestone={s.milestone} />}
             />
           ))}
           <Route path="*" element={<Placeholder label="Not found" milestone="—" />} />

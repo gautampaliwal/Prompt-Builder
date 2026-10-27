@@ -12,6 +12,7 @@ export default defineConfig({
           include: ['src/**/*.test.{ts,tsx}'],
           environment: 'jsdom',
           setupFiles: ['tests/setup/unit.ts'],
+          benchmark: { include: [] },
         },
       },
       {
@@ -21,6 +22,9 @@ export default defineConfig({
           include: ['tests/integration/**/*.test.ts'],
           environment: 'node',
           testTimeout: 60_000,
+          // Perf benchmarks assert the brief §10 targets. Run with `npm run bench`;
+          // kept out of `verify` because timings depend on the machine.
+          benchmark: { include: ['tests/perf/**/*.bench.ts'] },
         },
       },
     ],
